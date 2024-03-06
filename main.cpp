@@ -44,3 +44,10 @@ int main() {
         wait(RATE);
     }
 }
+
+/*Control Loop:
+
+Inside the while(1) loop, the code continuously reads the process variable from the analog input.
+It computes a new controller output based on the current process variable and the desired setpoint using the PID algorithm.
+The computed output is then applied to the system using PWM output.
+The controller output is displayed on the LCD screen.*/
