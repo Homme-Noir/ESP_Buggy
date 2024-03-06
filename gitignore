@@ -1,0 +1,9 @@
+BUILD
+.mbed
+compile_commands.json
+.clangd
+.cache
+PID
+QEI
+Motor
+C12832
