@@ -1,53 +1,60 @@
-#include "PID.h" // Include the PID controller class definition
-#include "C12832.h" // Include the LCD display class definition
+#include "Motor.h"
+#include "QEI.h"
+#include "PID.h"
+#include "mbed.h"
 
-#define RATE 0.1 // Sampling rate for the PID controller
+// Define motors and quadrature encoders
+Motor leftMotor(PB_8, PB_9, PB_10);  // pwm, inB, inA
+Motor rightMotor(PC_9, PC_8, PC_7); // pwm, inA, inB
+QEI leftQei(PA_0, PA_1, NC, 624);  // chanA, chanB, index, ppr
+QEI rightQei(PA_2, PA_3, NC, 624); // chanB, chanA, index, ppr
 
-// Create an instance of the PID controller with initial parameters
-PID controller(1.0, 0.0, 0.0, RATE);
+// Define the TCRT5000 sensor pins
+AnalogIn sensorCenter(A0);
+AnalogIn sensorLeft1(A1);
+AnalogIn sensorLeft2(A2);
+AnalogIn sensorRight1(A3);
+AnalogIn sensorRight2(A4);
+AnalogIn sensorBack(A5);
 
-// Analog input for the process variable
-AnalogIn pv(PC_4);
+// Define the PID controller for line following
+PID linePid(0.5, 0.1, 0.0, 0.01); // Example PID parameters
 
-// PWM output for the controller output
-PwmOut co(PC_8);
+// Define base speed
+const float baseSpeed = 0.5; // Adjust this value based on your requirements
 
-// LCD display object initialization
-C12832 lcd(D11, D13, D12, D7, D10);
+float calculatePositionError(float center, float left1, float left2, float right1, float right2, float back) {
+    // Constants for sensor positions relative to the center
+    const float sensorSpacing = 12.0; // in mm
 
-int main() {
-    // Configure input and output limits for the PID controller
-    controller.setInputLimits(0.0, 3.3); // Analog input range (0.0V to 3.3V)
-    controller.setOutputLimits(0.0, 1.0); // PWM output range (0.0 to 1.0)
+    // Calculate weighted position error
+    float positionError = (center * 0 + left1 * (-sensorSpacing) + left2 * (-2 * sensorSpacing) +
+                           right1 * sensorSpacing + right2 * (2 * sensorSpacing)) /
+                          (center + left1 + left2 + right1 + right2);
 
-    // Set bias, mode, and setpoint for the PID controller
-    controller.setBias(0.3); // Set controller bias
-    controller.setMode(AUTO_MODE); // Set controller mode to automatic
-    controller.setSetPoint(1.7); // Set desired setpoint for the controller
-
-    while(1) {
-        // Read the process variable from the analog input
-        controller.setProcessValue(pv.read());
-
-        // Compute the new controller output
-        float output = controller.compute();
-
-        // Set the new output to the PwmOut object
-        co = output;
-
-        // Display the controller output on the LCD screen
-        lcd.cls(); // Clear LCD screen
-        lcd.locate(15, 10); // Set cursor position
-        lcd.printf("%.2f", output); // Print the controller output with two decimal places
-
-        // Wait for the specified sampling rate before the next iteration
-        wait(RATE);
-    }
+    return positionError;
 }
 
-/*Control Loop:
+int main() {
+    while (true) {
+        // Read sensor values
+        float centerValue = sensorCenter.read();
+        float left1Value = sensorLeft1.read();
+        float left2Value = sensorLeft2.read();
+        float right1Value = sensorRight1.read();
+        float right2Value = sensorRight2.read();
+        float backValue = sensorBack.read();
 
-Inside the while(1) loop, the code continuously reads the process variable from the analog input.
-It computes a new controller output based on the current process variable and the desired setpoint using the PID algorithm.
-The computed output is then applied to the system using PWM output.
-The controller output is displayed on the LCD screen.*/
+        // Calculate the weighted average to determine the position error
+        float positionError = calculatePositionError(centerValue, left1Value, left2Value, right1Value, right2Value, backValue);
+
+        // Update the PID controller with the position error
+        linePid.setProcessValue(positionError);
+
+        // Compute new speeds for the motors based on PID output
+        float correction = linePid.compute();
+        leftMotor.speed(baseSpeed - correction);
+        rightMotor.speed(baseSpeed + correction);
+
+    }
+}
